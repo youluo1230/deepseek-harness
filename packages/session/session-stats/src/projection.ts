@@ -24,7 +24,7 @@
  */
 
 import { z } from 'zod'
-import { assistantStreamFirstTokenTime } from '@deepseek-ai/dsh-llm'
+import { assistantStreamFirstTokenTime, assistantStreamLastTokenTime } from '@deepseek-ai/dsh-llm'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 
 
@@ -46,6 +46,10 @@ interface SessionStatsTotals {
   decodeMs: number
   /** Summed provider output tokens over the same steps. */
   decodeTokens: number
+  /** Summed decode wall time over streaming steps (first→last token span ≥ STREAMING_MIN_MS), ms. */
+  streamedDecodeMs: number
+  /** Summed provider output tokens over the same streaming steps. */
+  streamedDecodeTokens: number
 }
 
 /**

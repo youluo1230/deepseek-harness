@@ -26,30 +26,30 @@ describe('assistantStepReading', () => {
   it('derives ttft, decode time, and output tokens from a fully recorded step', () => {
     const reading = assistantStepReading(assistant({
       seq: 2, turn: 1, step: 1,
-      timing: { stepStartTime: 1_000, firstTokenTime: 1_800, completedTime: 6_800 },
+      timing: { stepStartTime: 1_000, firstTokenTime: 1_800, lastTokenTime: 7_000, completedTime: 6_800 },
       usage: { outputTokens: 200 },
     }))
-    expect(reading).toEqual({ ttftMs: 800, decodeMs: 5_000, outputTokens: 200 })
+    expect(reading).toEqual({ ttftMs: 800, decodeMs: 5_000, outputTokens: 200, tokenSpanMs: 5_200 })
   })
 
   it('returns nulls when timing is absent', () => {
     const reading = assistantStepReading(assistant({ seq: 2, turn: 1, step: 1, usage: { outputTokens: 5 } }))
-    expect(reading).toEqual({ ttftMs: null, decodeMs: null, outputTokens: 5 })
+    expect(reading).toEqual({ ttftMs: null, decodeMs: null, outputTokens: 5, tokenSpanMs: null })
   })
 
   it('needs both boundaries for ttft and clamps negative spans to zero', () => {
     expect(assistantStepReading(assistant({
       seq: 2, turn: 1, step: 1,
       timing: { stepStartTime: null, firstTokenTime: 1_800, completedTime: 6_800 },
-    }))).toEqual({ ttftMs: null, decodeMs: 5_000, outputTokens: null })
+    }))).toEqual({ ttftMs: null, decodeMs: 5_000, outputTokens: null, tokenSpanMs: null })
     expect(assistantStepReading(assistant({
       seq: 2, turn: 1, step: 1,
       timing: { stepStartTime: 1_000, firstTokenTime: null, completedTime: 6_800 },
-    }))).toEqual({ ttftMs: null, decodeMs: null, outputTokens: null })
+    }))).toEqual({ ttftMs: null, decodeMs: null, outputTokens: null, tokenSpanMs: null })
     expect(assistantStepReading(assistant({
       seq: 2, turn: 1, step: 1,
       timing: { stepStartTime: 2_000, firstTokenTime: 1_500, completedTime: 1_200 },
-    }))).toEqual({ ttftMs: 0, decodeMs: 0, outputTokens: null })
+    }))).toEqual({ ttftMs: 0, decodeMs: 0, outputTokens: null, tokenSpanMs: null })
   })
 
   it('rejects non-object, missing, and non-finite usage token counts', () => {

@@ -1216,7 +1216,7 @@ describe('built-in conversation node Definitions', () => {
       const view = snapshot(current)
       const assistant = (node(view, 'assistant-step')?.data as AssistantChatData).finalNode
       expect(assistant?.timing).toEqual({
-        stepStartTime: 1_010, firstTokenTime: null, completedTime: 1_050,
+        stepStartTime: 1_010, firstTokenTime: null, lastTokenTime: null, completedTime: 1_050,
       })
       const tail = node(view, 'turn-tail')?.data as TurnTailChatData
       expect(tail.turn).toBe(1)

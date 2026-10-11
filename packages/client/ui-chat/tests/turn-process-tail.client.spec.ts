@@ -106,7 +106,7 @@ describe('Turn nodes in partial windows', () => {
         .toMatchObject({ kind: 'turn', turn: { turn: 1 } })
     }
     expect(complete.timeline.turns.get(1)?.steps[0]?.data.get('assistant-step')?.finalNode?.timing)
-      .toEqual({ stepStartTime: 2_000, firstTokenTime: null, completedTime: 3_000 })
+      .toEqual({ stepStartTime: 2_000, firstTokenTime: null, lastTokenTime: null, completedTime: 3_000 })
   })
 
   it.each(['attempt', 'uncommitted'] as const)('retains a missing-start footer after %s stream retirement', (kind) => {
