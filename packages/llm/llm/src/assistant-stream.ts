@@ -354,16 +354,16 @@ export function runLastTokenTime(run: AssistantStreamRun): number | undefined {
   let last: number | undefined
   for (let index = 0; index < fragments.length; index += 1) {
     if (index > 0) time += run.dt[index - 1] as number
-    if (isTokenDelta(runMemberChunk(run, index, fragments[index] as string))) last = time
+    if (isTokenDelta(runMemberChunk(run, fragments[index] as string))) last = time
   }
   return last
 }
 
 /**
- * Materialize the member chunk of one packed run at `index`, matching the
- * expansion in {@link expandAssistantStream}.
+ * Materialize the member chunk of one packed run, matching the expansion in
+ * {@link expandAssistantStream}.
  */
-function runMemberChunk(run: AssistantStreamRun, index: number, fragment: string): StreamChunk {
+function runMemberChunk(run: AssistantStreamRun, fragment: string): StreamChunk {
   if (run.type === 'text-chunks') {
     return { type: 'text-delta', index: run.index, text: fragment }
   }
