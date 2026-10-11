@@ -34,6 +34,7 @@ interface AssistantState {
   readonly firstVisibleSeq: number | undefined
   readonly firstVisibleTime: number | undefined
   readonly firstTokenTime: number | undefined
+  readonly lastTokenTime: number | undefined
   readonly final: ConversationMatch | undefined
   readonly usage: unknown
 }
@@ -47,6 +48,7 @@ function initialState(turn: number, step: number): AssistantState {
     firstVisibleSeq: undefined,
     firstVisibleTime: undefined,
     firstTokenTime: undefined,
+    lastTokenTime: undefined,
     final: undefined,
     usage: undefined,
   }
@@ -158,6 +160,7 @@ function updateChunk(
     ...firstToken && state.firstTokenTime === undefined
       ? { firstTokenTime: time }
       : {},
+    ...firstToken ? { lastTokenTime: time } : {},
   }
 }
 
@@ -206,6 +209,7 @@ function finalNode(
       timing: {
         stepStartTime: context.start?.event.time ?? null,
         firstTokenTime: state.firstTokenTime ?? null,
+        lastTokenTime: state.lastTokenTime ?? null,
         completedTime: event.time,
       },
       ...event.data.interrupted === true ? { interrupted: true } : {},

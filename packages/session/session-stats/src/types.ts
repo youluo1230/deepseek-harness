@@ -36,6 +36,10 @@ export interface SessionStatsProjection {
   decodeMs: number
   /** Summed provider output tokens over the same decode-timed steps. */
   decodeTokens: number
+  /** Summed decode wall time over steps whose first→last token span reached the streaming threshold. */
+  streamedDecodeMs: number
+  /** Summed provider output tokens over the same streaming-decode-timed steps. */
+  streamedDecodeTokens: number
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {

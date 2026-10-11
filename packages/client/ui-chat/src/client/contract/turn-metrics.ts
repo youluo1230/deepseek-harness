@@ -12,6 +12,8 @@ export interface StepReading {
   decodeMs: number | null
   /** Provider-reported completion tokens. */
   outputTokens: number | null
+  /** First → last token delta span, in ms; null when unrecorded (older snapshots) or no token. */
+  tokenSpanMs: number | null
 }
 
 interface UsageLike {
@@ -39,5 +41,8 @@ export function assistantStepReading(node: AssistantNode): StepReading {
   const decodeMs = timing !== undefined && timing.firstTokenTime !== null
     ? Math.max(0, timing.completedTime - timing.firstTokenTime)
     : null
-  return { ttftMs, decodeMs, outputTokens: usageOutputTokens(node.usage) }
+  const tokenSpanMs = timing !== undefined && timing.firstTokenTime !== null && timing.lastTokenTime != null
+    ? Math.max(0, timing.lastTokenTime - timing.firstTokenTime)
+    : null
+  return { ttftMs, decodeMs, outputTokens: usageOutputTokens(node.usage), tokenSpanMs }
 }

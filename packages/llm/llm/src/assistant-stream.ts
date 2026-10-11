@@ -341,6 +341,63 @@ export function assistantStreamFirstTokenTime(stream: readonly AssistantStreamRe
 }
 
 /**
+ * Time of the last member of one packed run that {@link isTokenDelta} accepts. Scans
+ * every member: fragments interleave across runs of different block indexes, so the
+ * last token may sit in any run, and within a run the accumulated member time peaks
+ * at the final qualifying member.
+ * @param run - one packed delta run.
+ * @returns the member's reconstructed time, or undefined when no member qualifies.
+ */
+export function runLastTokenTime(run: AssistantStreamRun): number | undefined {
+  const fragments = run.type === 'tool-call-chunks' ? run.args : run.texts
+  let time = run.time0
+  let last: number | undefined
+  for (let index = 0; index < fragments.length; index += 1) {
+    if (index > 0) time += run.dt[index - 1] as number
+    if (isTokenDelta(runMemberChunk(run, index, fragments[index] as string))) last = time
+  }
+  return last
+}
+
+/**
+ * Materialize the member chunk of one packed run at `index`, matching the
+ * expansion in {@link expandAssistantStream}.
+ */
+function runMemberChunk(run: AssistantStreamRun, index: number, fragment: string): StreamChunk {
+  if (run.type === 'text-chunks') {
+    return { type: 'text-delta', index: run.index, text: fragment }
+  }
+  if (run.type === 'reasoning-chunks') {
+    return { type: 'reasoning-delta', index: run.index, text: fragment }
+  }
+  return {
+    type: 'tool-call-delta',
+    index: run.index,
+    id: run.id,
+    ...(Object.hasOwn(run, 'name') ? { name: run.name } : {}),
+    argumentsDelta: fragment,
+  }
+}
+
+/**
+ * Time of the last token in one compact stream per {@link isTokenDelta}. Unlike the
+ * first-token read this must scan every record: packed runs interleave across block
+ * indexes, so the last qualifying member may sit in any of them.
+ * @param stream - compact records from one durable Assistant settlement.
+ * @returns the last token's time, or undefined when the stream carries no token.
+ */
+export function assistantStreamLastTokenTime(stream: readonly AssistantStreamRecord[]): number | undefined {
+  let last: number | undefined
+  for (const record of stream) {
+    const time = record.type === 'chunk'
+      ? (isTokenDelta(record.chunk) ? record.time : undefined)
+      : runLastTokenTime(record)
+    if (time !== undefined) last = time
+  }
+  return last
+}
+
+/**
  * Whether one compact stream carries any reader-visible content per {@link isVisibleChunk},
  * stopping at the first qualifying member.
  * @param stream - compact records from one durable Assistant settlement.

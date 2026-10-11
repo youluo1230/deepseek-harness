@@ -78,6 +78,14 @@ const sessionStatsSchema = z.object({
   ttftSteps: z.number().int().nonnegative(),
   decodeMs: z.number().nonnegative(),
   decodeTokens: z.number().nonnegative(),
+  // Streaming-only decode figures: same accrual as decodeMs/decodeTokens but
+  // restricted to steps whose first→last token span reached STREAMING_MIN_MS.
+  // Whole-log TPS displays divide these two; steps that received their entire
+  // output in one burst (non-streaming tool-call arguments, aggregated relay
+  // responses) carry many tokens in a near-zero window and would otherwise
+  // inflate the quotient — see the fold in `assistant/message` below.
+  streamedDecodeMs: z.number().nonnegative(),
+  streamedDecodeTokens: z.number().nonnegative(),
 }).strict()
 
 /**
@@ -93,6 +101,9 @@ const sessionStatsStateSchema = sessionStatsSchema.extend({
     step: z.number().int().nonnegative(),
     startTime: z.number().nonnegative(),
     firstTokenTime: z.number().nonnegative().nullable(),
+    // Time of the last token delta seen in the open step, for the streaming
+    // span check; null until a first token is recorded.
+    lastTokenTime: z.number().nonnegative().nullable(),
   }).nullable(),
   pendingCalls: z.record(z.string(), z.number().nonnegative()),
 })
@@ -110,9 +121,18 @@ function usageOutputTokens(usage: unknown): number | null {
 }
 
 /** The `sessionStats` unit registered on `ctx.sessionProjections` (exported for the unit spec). */
+
+/**
+ * Minimum first→last token span for a step to count as streaming into the
+ * `streamedDecode*` totals. Chosen above typical scheduler coalescing jitter
+ * (chunk batching lands deltas within a tick) yet far below any genuine
+ * multi-token generation window, so only true burst deliveries are excluded.
+ */
+const STREAMING_MIN_MS = 200
+
 export const sessionStatsProjectionDefinition = {
   key: 'sessionStats',
-  stateVersion: 1,
+  stateVersion: 2,
   stateSchema: sessionStatsStateSchema,
   init: () => ({
     turns: 0,
@@ -123,6 +143,8 @@ export const sessionStatsProjectionDefinition = {
     ttftSteps: 0,
     decodeMs: 0,
     decodeTokens: 0,
+    streamedDecodeMs: 0,
+    streamedDecodeTokens: 0,
     lastTurn: null,
     openStep: null,
     pendingCalls: {},
@@ -133,7 +155,7 @@ export const sessionStatsProjectionDefinition = {
       case 'step/start':
         return {
           ...state,
-          openStep: { turn: event.data.turn, step: event.data.step, startTime: event.time, firstTokenTime: null },
+          openStep: { turn: event.data.turn, step: event.data.step, startTime: event.time, firstTokenTime: null, lastTokenTime: null },
         }
       case 'assistant/attempt': {
         const open = state.openStep
@@ -160,6 +182,18 @@ export const sessionStatsProjectionDefinition = {
           if (outputTokens !== null) {
             next.decodeMs += Math.max(0, event.time - firstToken)
             next.decodeTokens += outputTokens
+            // Streaming-only accrual: a step whose last token landed at least
+            // STREAMING_MIN_MS after the first generated its output over a real
+            // time window. Burst steps (whole output in one delta — non-streamed
+            // tool-call arguments, aggregating relays) have a near-zero span and
+            // are excluded, so whole-log TPS built on streamedDecode* reflects
+            // actual generation speed instead of being dragged upward by
+            // token-heavy zero-window steps.
+            const lastTokenTime = open.lastTokenTime ?? assistantStreamLastTokenTime(event.data.stream) ?? firstToken
+            if (lastTokenTime - firstToken >= STREAMING_MIN_MS) {
+              next.streamedDecodeMs += Math.max(0, event.time - firstToken)
+              next.streamedDecodeTokens += outputTokens
+            }
           }
         }
         return next
@@ -207,6 +241,8 @@ export const sessionStatsProjectionDefinition = {
       ttftSteps: state.ttftSteps,
       decodeMs: state.decodeMs,
       decodeTokens: state.decodeTokens,
+      streamedDecodeMs: state.streamedDecodeMs,
+      streamedDecodeTokens: state.streamedDecodeTokens,
     }),
   },
 } satisfies ProjectionDefinition<'sessionStats', SessionStatsState>

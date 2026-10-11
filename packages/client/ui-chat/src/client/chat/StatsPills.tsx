@@ -21,6 +21,13 @@ import { MEASURE_STYLE, useStatDialog } from './stat-dialog.ts'
 import css from './StatsPills.module.css'
 import dialogCss from './stat-dialog.module.css'
 
+/**
+ * Minimum first→last token span for a step to count as streaming into the
+ * streaming-window decode totals. Mirrors the gate in the sessionStats
+ * projection; kept here for the window fold fallback.
+ */
+const STREAMING_MIN_MS = 200
+
 interface WindowStats {
   turns: number
   steps: number
@@ -36,6 +43,10 @@ interface WindowStats {
   decodeMs: number
   /** Summed output tokens over the same decode-timed steps. */
   decodeTokens: number
+  /** Streaming-window decode totals served by the sessionStats projection (absent in older folds). */
+  streamedDecodeMs?: number
+  /** Streaming-window output tokens served by the sessionStats projection. */
+  streamedDecodeTokens?: number
 }
 
 /**
@@ -59,6 +70,8 @@ export function deriveStats(nodes: ChatSnapshot['legacy']['nodes']): WindowStats
   let ttftSteps = 0
   let decodeMs = 0
   let decodeTokens = 0
+  let streamedDecodeMs = 0
+  let streamedDecodeTokens = 0
   for (const node of nodes) {
     if (node.kind === 'tool-result') {
       if (node.callTime !== null) toolMs += Math.max(0, node.time - node.callTime)
@@ -78,9 +91,18 @@ export function deriveStats(nodes: ChatSnapshot['legacy']['nodes']): WindowStats
     if (reading.decodeMs !== null && reading.outputTokens !== null) {
       decodeMs += reading.decodeMs
       decodeTokens += reading.outputTokens
+      // Mirror the projection's streaming gate: only steps whose recorded
+      // token span proves generation over time feed the streaming totals.
+      if (reading.tokenSpanMs !== null && reading.tokenSpanMs >= STREAMING_MIN_MS) {
+        streamedDecodeMs += reading.decodeMs
+        streamedDecodeTokens += reading.outputTokens
+      }
     }
   }
-  return { turns: turns.size, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens }
+  return {
+    turns: turns.size, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens,
+    ...(decodeMs > 0 ? { streamedDecodeMs, streamedDecodeTokens } : {}),
+  }
 }
 
 /**
@@ -163,9 +185,22 @@ function useSessionStats(useChat: StatPillProps['useChat'], useProjection: UsePr
   return useMemo(() => projected ?? deriveStats(settledNodes), [projected, settledNodes])
 }
 
+/**
+ * Display-ready whole-log decode speed. Prefers the streaming-window totals
+ * (steps whose first→last token span proves genuine generation over time);
+ * burst steps — whole output in one delta, e.g. non-streamed tool-call
+ * arguments — carry many tokens in a near-zero window and would inflate the
+ * quotient, so they are excluded whenever streaming totals exist. Falls back
+ * to the plain totals for projections predating the streaming fields.
+ */
 function decodeSpeed(stats: WindowStats, t: Translate): string {
+  const streamed = stats.streamedDecodeMs !== undefined
+    && stats.streamedDecodeTokens !== undefined
+    && stats.streamedDecodeMs > 0
+  const ms = streamed ? stats.streamedDecodeMs : stats.decodeMs
+  const tokens = streamed ? stats.streamedDecodeTokens : stats.decodeTokens
   return t('message.tokensPerSecond', {
-    tps: formatTokensPerSecond(stats.decodeTokens / (stats.decodeMs / 1_000)),
+    tps: formatTokensPerSecond(tokens / (ms / 1_000)),
   })
 }
 
@@ -237,7 +272,10 @@ function DialogPill({ stat, icon, label, ariaLabel, title, titleValue, children 
 export const ActivityPill = memo(function ActivityPill({ useChat, useProjection, usePerformanceUsage, t }: StatPillProps) {
   const mode = usePerformanceUsage(value => value)
   const stats = useSessionStats(useChat, useProjection)
-  const speed = stats.decodeMs > 0 ? decodeSpeed(stats, t) : null
+  const hasDecodeWindow = stats.streamedDecodeMs === undefined
+    ? stats.decodeMs > 0
+    : stats.streamedDecodeMs > 0 || stats.decodeMs > 0 && stats.streamedDecodeTokens === 0
+  const speed = hasDecodeWindow ? decodeSpeed(stats, t) : null
   const icon = <IconGaugeOutlineRegular />
   if (mode === 'compact') return speed === null ? null : <PlainPill stat="activity" icon={icon} label={speed} />
   if (stats.steps === 0) return null

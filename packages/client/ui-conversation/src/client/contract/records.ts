@@ -54,6 +54,8 @@ export interface AssistantTiming {
   stepStartTime: number | null
   /** First non-empty text/reasoning/tool delta timestamp, or null when no token delta was recorded. */
   firstTokenTime: number | null
+  /** Last token delta timestamp, or null when no token delta was recorded; undefined in snapshots predating the field. */
+  lastTokenTime?: number | null
   /** Final assistant/message timestamp. */
   completedTime: number
 }
