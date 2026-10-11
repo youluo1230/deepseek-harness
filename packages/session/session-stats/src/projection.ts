@@ -62,7 +62,7 @@ interface SessionStatsState extends SessionStatsTotals {
   /** Turn of the last counted `step/end`; null before the first. */
   lastTurn: number | null
   /** The open step's boundary facts; null outside a step or after its message assembled. */
-  openStep: { turn: number; step: number; startTime: number; firstTokenTime: number | null } | null
+  openStep: { turn: number; step: number; startTime: number; firstTokenTime: number | null; lastTokenTime: number | null } | null
   /** Dispatch times of tool calls whose result has not landed, by callId. */
   pendingCalls: Record<string, number>
 }
